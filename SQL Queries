@@ -1,5 +1,4 @@
 --Tables:-
-
 SELECT * FROM fact_table LIMIT 10;
 SELECT * FROM item_dim;
 SELECT * FROM customer_dim;
@@ -7,125 +6,100 @@ SELECT * FROM store_dim;
 SELECT * FROM time_dim;
 SELECT * FROM trans_dim;
 
---How many transaction types are there?
-SELECT trans_type FROM trans_dim
-GROUP BY trans_type;
+--What is our sales and num_of_transactions as per the different payment methods we accept?
+SELECT trans_type, ROUND(SUM(total_price))AS total_sales,
+COUNT(t.payment_key)AS num_of_trans 
+FROM fact_table f 
+RIGHT JOIN trans_dim t ON t.payment_key = f.payment_key
+GROUP BY trans_type
+ORDER BY total_sales DESC;
 
---Number of customers we have?
-SELECT COUNT(customer_key)AS num_of_customers FROM customer_dim;
+--Now similarly let's understand the sales distribution b/w different units.
+SELECT i.unit, ROUND(SUM(total_price))AS total_sales FROM item_dim i
+LEFT JOIN fact_table f ON f.item_key = i.item_key
+GROUP BY i.unit
+ORDER BY total_sales DESC;
 
---How many stores do we have under each division?
-SELECT division, COUNT(1)AS num_of_stores FROM store_dim
-GROUP BY division;
-
---What are Total sales for each quarter for each year?
-SELECT t.year,t.quarter, ROUND(SUM(f.total_price))AS Amount_of_Sales
-FROM time_dim t
-JOIN fact_table f ON f.time_key = t.time_key
-GROUP BY t.year,t.quarter;
-
---What are the various unit of product we have and count of products we have under each unit?
-SELECT unit, COUNT(1)AS num_of_products FROM item_dim
-WHERE unit IS NOT NULL
-GROUP BY unit
-ORDER BY num_of_products DESC;
-
-/*From which country are we getting the highest number of products from and
-how many supplier do we have from that country?*/
-WITH a AS(SELECT man_country, COUNT(1)AS num_of_supplier FROM item_dim
+--How many supplier do we have from each man_country?
+SELECT man_country, COUNT(supplier)AS num_of_suppliers FROM item_dim
 GROUP BY man_country
-),
-b AS(SELECT man_country,COUNT(item_name)AS num_of_items FROM item_dim
-GROUP BY man_country
-)
-SELECT a.*, b.num_of_items FROM a 
-JOIN b ON b.man_country = a.man_country;
+ORDER BY num_of_suppliers DESC;
 
---Who are our Top 5 Customers in terms of spending?
+--What was our Sales for each quarter and compare it with the last quarter?
+with my_cte AS
+(SELECT year, quarter, ROUND(SUM(total_price))AS total_quarter_sales,
+LAG(ROUND(SUM(total_price)),1)OVER(ORDER BY year,quarter)AS prev_quarter_sales
+FROM fact_table f 
+JOIN time_dim t ON t.time_key = f.time_key
+GROUP BY year, quarter)
+SELECT *, (total_sales - prev_quarter_sales)AS Sales_Diff FROM my_cte;
+
+--What are the Average number of transactions on our platform each hour of the day?
+SELECT hour, AVG(num_of_transactions)AS avg_transactions FROM
+(SELECT t.time_key, hour, COUNT(*)AS num_of_transactions FROM fact_table f 
+JOIN time_dim t ON t.time_key = f.time_key
+GROUP BY t.time_key, hour)t1
+GROUP BY hour
+ORDER BY hour; 
+
+--Total Number of transactions in each year and compare it with last year?
+SELECT *, (Num_of_transactions-prev_year_transactions)AS difference FROM
+(SELECT year, COUNT(*)AS Num_of_transactions, 
+LAG(COUNT(*),1)OVER(ORDER BY year)AS prev_year_transactions
+FROM fact_table f
+JOIN time_dim t ON t.time_key = f.time_key
+GROUP BY year)t1;
+
+/*Which product is the overall best performing in terms of sales in each unit 
+and who is our supplier and man_country for that purticular product*/
 SELECT * FROM
-(SELECT DENSE_RANK()OVER(ORDER BY SUM(total_price) DESC)AS rnk,
-name, SUM(total_price)AS total_amount_of_purchases
-FROM customer_dim c
-JOIN fact_table f ON f.customer_key = c.customer_key
-GROUP BY name)t1
-WHERE rnk <=5;
-
---What are our Sales each year?
-SELECT year, ROUND(SUM(total_price))AS sales
-FROM time_dim t
-JOIN fact_table f ON f.time_key = t.time_key
-GROUP BY year;
-
---Create an query to find the Day of the week with the highest number of Sales in average?
-SELECT * FROM(SELECT DENSE_RANK()OVER(ORDER BY SUM(avg_sales)DESC)AS rnk,
-day_name, 
-ROUND(SUM(avg_sales)) FROM
-(SELECT TO_CHAR(TO_TIMESTAMP(date, 'DD-MM-YYYY HH24:MI'), 'Day') AS day_name,
-(AVG(total_price))AS avg_sales
-FROM time_dim t 
-JOIN fact_table f ON f.time_key = t.time_key
-GROUP BY date)t1
-GROUP BY day_name)t2
-WHERE rnk = 1
-
---Write an Query to find the top 10 selling products and their sales quantities for each quarter?
-SELECT * FROM 
-(SELECT i.item_name, COUNT(f.item_key)AS Quantity_sold, ROUND(SUM(f.total_price))AS total_amount,
-DENSE_RANK()OVER(ORDER BY COUNT(f.item_key)DESC)AS rnk FROM item_dim i
-JOIN fact_table f ON f.item_key = i.item_key
-GROUP BY i.item_name)t1
-WHERE rnk <=10;
-
-/*Write a query to compare the average transaction value for each store and
-identify the store with the highest average.*/
-SELECT DENSE_RANK()OVER(ORDER BY AVG(total_price)DESC)AS Rnk,
-sub_district, AVG(total_price)AS avg_sales FROM store_dim s 
-JOIN fact_table f ON f.store_key = s.store_key
-GROUP BY sub_district;
-
---Develop a query to visualize the monthly trend in total revenue over the last year(2020).
-SELECT month, ROUND(SUM(total_price))AS sales FROM time_dim t
-JOIN fact_table f ON f.time_key = t.time_key
-WHERE year = 2020
-GROUP BY month
-ORDER BY sales DESC;
-
-/*Write a query to identify transactions with a total value significantly deviating 
-from the average transaction value.*/
-SELECT *, CASE WHEN total_price > (SELECT ROUND(AVG(total_price)) FROM fact_table) THEN 'Higher_then_avg'
-			WHEN total_price < (SELECT ROUND(AVG(total_price)) FROM fact_table) THEN 'Lower_then_avg' 
-			ELSE 'Avg' END as Remarks
-FROM fact_table;
-
---Find the top 5 items that contributed the most to the overall revenue in the last quarter(which is Q1 OF 2021).
-WITH my_cte AS(SELECT * FROM
-(SELECT DENSE_RANK()OVER(ORDER BY SUM(total_price)DESC)AS rnk,
-item_name, SUM(total_price)AS sales 
+(SELECT RANK()OVER(PARTITION BY i.unit ORDER BY SUM(total_price)DESC)AS Rnk,
+i.unit, item_name, supplier, man_country, SUM(total_price)AS Sales_Amount
 FROM item_dim i
-JOIN fact_table f ON f.item_key = i.item_key
+RIGHT JOIN fact_table f ON f.item_key = i.item_key
+GROUP BY i.unit, item_name, supplier, man_country)t1
+WHERE Rnk = 1
+ORDER BY Sales_Amount DESC;
+
+--Which stores are performing overall better then average then others in terms of Sales?
+WITH my_cte AS
+(SELECT f.store_key, s.division, s.district, s.sub_district, 
+SUM(total_price) AS sales FROM fact_table f
+ JOIN store_dim s ON s.store_key = f.store_key
+GROUP BY f.store_key, s.division, s.district, s.sub_district),
+my_cte2 AS
+(SELECT AVG(sales)AS avg_sales FROM my_cte)
+
+SELECT * FROM my_cte, my_cte2
+WHERE sales >= avg_sales
+ORDER BY sales DESC; 
+
+/*Distinguish the products as per their Average Quantity sold?
+(When Quantity sold is more then average then "More" else "Less")*/
+WITH my_cte AS
+(SELECT i.item_name, SUM(total_price)AS sales FROM fact_table f
+JOIN item_dim i ON i.item_key = f.item_key
+GROUP BY i.item_name),
+
+my_cte2 AS
+(SELECT AVG(sales)AS avg_sales FROM my_cte)
+
+SELECT item_name, sales, 
+CASE WHEN sales >= avg_sales THEN 'More then Avg' ELSE 'Less then Avg' END AS Remarks
+FROM my_cte, my_cte2
+GROUP BY item_name, sales, avg_sales;
+
+--Who is our number one supplier for each unit(counts of products he is selling)?
+SELECT * FROM
+(SELECT RANK()OVER(PARTITION BY unit ORDER BY COUNT(supplier)DESC)AS Rnk,
+unit, supplier, man_country, COUNT(supplier)AS Num_of_products FROM item_dim
+GROUP BY unit, supplier, man_country)t1
+WHERE Rnk = 1;
+
+--What was our Sales Trend for each month in 2020 and compare it with 2019?
+SELECT month, TO_CHAR(TO_DATE(Date, 'DD-MM-YYYY HH24:MI'),'MONTH')AS month_name,
+ROUND(SUM(total_price))AS Sales FROM fact_table f
 JOIN time_dim t ON t.time_key = f.time_key
-WHERE year =  2021 AND quarter = 'Q1'
-GROUP BY item_name)t1
-WHERE rnk < 6)
-
-SELECT item_name,sales, ROUND(sales*100.0/SUM(sales)OVER())AS percentage FROM my_cte
-GROUP BY item_name, sales
-ORDER BY sales DESC;
-
---Create a query to identify hour of the day with the highest avg total revenue.
-SELECT hour, ROUND(AVG(total_price)) FROM time_dim t
-JOIN fact_table f ON f.time_key = t.time_key 
-GROUP BY hour 
-ORDER BY 2 DESC
-LIMIT 1;
-
-/*Write a query to calculate the CLV for each customer, 
-considering their total spending and the time since their first purchase.*/
-SELECT name, ROUND(SUM(total_price))AS amount_spend, CURRENT_DATE, MIN(date),
-CURRENT_DATE - MIN(TO_TIMESTAMP(date,'DD-MM-YYYY HH24:MI'))AS Total_Days 
-FROM customer_dim c 
-JOIN fact_table f ON f.customer_key = c.customer_key
-JOIN time_dim t ON t.time_key = f.time_key
-WHERE name IS NOT NULL
-GROUP BY name
-ORDER BY 3 DESC, 2 DESC;
+WHERE year = 2020
+GROUP BY month, month_name
+ORDER BY month;
