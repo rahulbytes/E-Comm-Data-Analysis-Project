@@ -25,3 +25,7 @@ SQL queries are employed to extract and analyze data. Key elements of the SQL an
 - CASE Statements
 - Common Table Expressions (CTE's)
 - Calculations and functions
+
+## PowerBI Dashboard
+<img width="534" alt="Screenshot 2024-02-26 123812" src="https://github.com/rahulbytes/E-Comm-SQL-Project/assets/142666454/4eb93ebe-cb3a-4ba7-a0bf-9cd8746e94f9">
+
