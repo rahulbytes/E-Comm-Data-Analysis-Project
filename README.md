@@ -5,7 +5,7 @@ This repository contains SQL queries and analyses for a E-comm dataset. The data
 ## Table of Contents
 - [Data Analysis](#data-analysis)
 - [SQL Analysis](#sql-analysis)
-- [PowerBI Dashboard](#Powerni-dashboard)
+- [PowerBI Dashboard](#powerbi-dashboard)
 
 ## Data Analysis
 
