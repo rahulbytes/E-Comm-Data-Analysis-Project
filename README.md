@@ -1,6 +1,6 @@
-# E-comm SQL Project
+# E-comm Data analysis Project
 
-This repository contains SQL queries and analyses for a E-comm dataset. The dataset includes tables for transactions, customer information, item details, store details, and time dimensions. The goal of this project is to perform various analyses and generate insights from the given data.
+This repository contains SQL queries and the dashboard for a E-comm dataset. The dataset includes tables for transactions, customer information, item details, store details, and time dimensions. The goal of this project is to perform various analyses and generate insights from the given data.
 
 ## Table of Contents
 - [Data Analysis](#data-analysis)
